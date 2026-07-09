@@ -59,8 +59,8 @@ type PlivoMedia struct {
 
 // PlivoOutboundMessage is a message sent from the server to Plivo: playAudio to
 // transmit audio to the caller, clearAudio to flush buffered audio (barge-in).
-// Every outbound message carries the streamId of the stream it targets; playAudio
-// additionally sets the codec via contentType/sampleRate on the media object.
+// clearAudio carries the streamId of the stream it targets; playAudio carries no
+// streamId and sets the codec via contentType/sampleRate on the media object.
 type PlivoOutboundMessage struct {
 	Event    EventType           `json:"event"`
 	StreamID string              `json:"streamId,omitempty"`

@@ -69,7 +69,9 @@ func NewAudioProcessor(logger commons.Logger) (*AudioProcessor, error) {
 		TargetAudioConfig: internal_audio.NewLinear8khzMonoAudioConfig(),
 		FrameBytes:        OutputChunkSize * 2,
 	})
-	if err == nil {
+	if err != nil {
+		logger.Warnf("ambient mixer unavailable, ambient audio disabled: %v", err)
+	} else {
 		audioProcessor.ambientMixer = ambientMixer
 	}
 

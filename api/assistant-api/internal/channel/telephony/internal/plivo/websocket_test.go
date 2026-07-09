@@ -225,13 +225,13 @@ func TestOutboundMessages_RoundTrip(t *testing.T) {
 	// Outbound messages must target the active stream via streamId.
 	streamer.streamID = "MZtest0000000000000000000000000000"
 
-	// playAudio carries base64 mu-law plus the streamId.
+	// playAudio carries base64 mu-law and, per Plivo's protocol, no streamId.
 	require.NoError(t, streamer.sendOutputFrame(internal_telephony_media.AssistantOutputFrame{
 		ProviderAudio: []byte{1, 2, 3, 4},
 	}))
 	playMsg := readOutbound(t, clientConn)
 	assert.Equal(t, internal_plivo.EventTypePlayAudio, playMsg.Event)
-	assert.Equal(t, streamer.streamID, playMsg.StreamID)
+	assert.Empty(t, playMsg.StreamID)
 	require.NotNil(t, playMsg.Media)
 	assert.Equal(t, internal_plivo.OutboundContentType, playMsg.Media.ContentType)
 	assert.Equal(t, internal_plivo.OutboundSampleRate, playMsg.Media.SampleRate)

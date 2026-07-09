@@ -342,7 +342,7 @@ func (pws *plivoWebsocketStreamer) Send(response internal_type.Stream) error {
 	case *protos.ConversationDisconnection:
 		_ = pws.Disconnect(data.GetType())
 		if pws.GetConversationUuid() != "" {
-			if err := pws.telephony.HangupCall(pws.GetConversationUuid(), pws.VaultCredential()); err != nil {
+			if err := pws.hangupWithRetry(pws.GetConversationUuid()); err != nil {
 				_ = pws.Record(observability.RecordLog{
 					Level:   observability.LevelError,
 					Message: "Failed to end Plivo call on server-side disconnect",
@@ -394,7 +394,7 @@ func (pws *plivoWebsocketStreamer) Send(response internal_type.Stream) error {
 		case protos.ToolCallAction_TOOL_CALL_ACTION_END_CONVERSATION:
 			result := map[string]string{"status": "completed"}
 			if pws.GetConversationUuid() != "" {
-				if err := pws.telephony.HangupCall(pws.GetConversationUuid(), pws.VaultCredential()); err != nil {
+				if err := pws.hangupWithRetry(pws.GetConversationUuid()); err != nil {
 					_ = pws.Record(observability.RecordLog{
 						Level:   observability.LevelError,
 						Message: "Failed to end Plivo call",
@@ -560,12 +560,11 @@ func (pws *plivoWebsocketStreamer) sendOutputFrame(frame internal_telephony_medi
 }
 
 // sendPlayAudio writes a Plivo playAudio message carrying base64 mu-law audio.
-// The codec is declared on the media object (contentType/sampleRate) and the
-// message targets the active stream via streamId.
+// The codec is declared on the media object (contentType/sampleRate). Per Plivo's
+// protocol the playAudio frame carries no streamId (only clearAudio does).
 func (pws *plivoWebsocketStreamer) sendPlayAudio(payload string) error {
 	return pws.writeMessage(internal_plivo.PlivoOutboundMessage{
-		Event:    internal_plivo.EventTypePlayAudio,
-		StreamID: pws.streamID,
+		Event: internal_plivo.EventTypePlayAudio,
 		Media: &internal_plivo.PlivoOutboundMedia{
 			ContentType: internal_plivo.OutboundContentType,
 			SampleRate:  internal_plivo.OutboundSampleRate,
@@ -585,6 +584,11 @@ func (pws *plivoWebsocketStreamer) sendClearAudio() error {
 
 // writeMessage marshals and writes an outbound message under the write lock.
 func (pws *plivoWebsocketStreamer) writeMessage(message internal_plivo.PlivoOutboundMessage) error {
+	// No outbound frame is meaningful before the stream is established; mirror
+	// the Twilio streamer and drop it rather than emit an unaddressed message.
+	if pws.streamID == "" {
+		return nil
+	}
 	messageJSON, err := json.Marshal(message)
 	if err != nil {
 		_ = pws.Record(observability.RecordLog{
@@ -629,6 +633,22 @@ func (pws *plivoWebsocketStreamer) writeMessage(message internal_plivo.PlivoOutb
 		return err
 	}
 	return nil
+}
+
+// hangupWithRetry ends the Plivo call over REST, retrying briefly on transient
+// failures. The answer XML sets keepCallAlive, so closing the media WebSocket
+// alone does not end the PSTN leg — only this REST hangup does.
+func (pws *plivoWebsocketStreamer) hangupWithRetry(conversationUUID string) error {
+	var err error
+	for attempt := 1; attempt <= 3; attempt++ {
+		if err = pws.telephony.HangupCall(conversationUUID, pws.VaultCredential()); err == nil {
+			return nil
+		}
+		if attempt < 3 {
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
+	}
+	return err
 }
 
 func (pws *plivoWebsocketStreamer) stopAudioProcessing() {
