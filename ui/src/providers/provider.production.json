@@ -127,6 +127,28 @@
         ]
     },
     {
+        "code": "plivo",
+        "name": "Plivo",
+        "description": "Cloud communications platform for SMS, voice, and messaging (CPaaS)",
+        "image": "https://cdn-01.rapida.ai/partners/tools/plivo-icon.svg",
+        "featureList": [
+            "telephony",
+            "external"
+        ],
+        "configurations": [
+            {
+                "name": "auth_token",
+                "type": "string",
+                "label": "Auth token"
+            },
+            {
+                "name": "auth_id",
+                "type": "string",
+                "label": "Auth id"
+            }
+        ]
+    },
+    {
         "code": "telnyx",
         "name": "Telnyx",
         "description": "Programmable telephony platform offering Call Control API and bidirectional WebSocket media streaming.",
