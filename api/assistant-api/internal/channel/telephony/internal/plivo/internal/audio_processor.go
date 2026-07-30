@@ -8,6 +8,7 @@ package internal_plivo
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	internal_audio "github.com/rapidaai/api/assistant-api/internal/audio"
@@ -116,6 +117,15 @@ func (audioProcessor *AudioProcessor) ProcessAssistantAudio(audio []byte, comple
 		converted, err := audioProcessor.convertOutputAudio(audio)
 		if err != nil {
 			return fmt.Errorf("%w: %w", ErrAssistantAudioConversionFailed, err)
+		}
+		// DIAGNOSTIC: capture bytes to container /tmp (retrieve via docker cp)
+		if f, e := os.OpenFile("/tmp/tts_in_l16_16k.pcm", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); e == nil {
+			_, _ = f.Write(audio)
+			_ = f.Close()
+		}
+		if f, e := os.OpenFile("/tmp/tts_out_mulaw_8k.raw", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); e == nil {
+			_, _ = f.Write(converted)
+			_ = f.Close()
 		}
 		audioProcessor.outputBuffer.Write(converted)
 		audioProcessor.bridgeOutputBuffer.Write(audio)

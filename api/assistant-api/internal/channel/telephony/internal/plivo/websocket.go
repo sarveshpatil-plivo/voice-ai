@@ -325,6 +325,7 @@ func (pws *plivoWebsocketStreamer) Send(response internal_type.Stream) error {
 	case *protos.ConversationAssistantMessage:
 		switch content := data.Message.(type) {
 		case *protos.ConversationAssistantMessage_Audio:
+			pws.telephony.logger.Infof("[plivo-debug] assistant audio received: completed=%v mediaSessionNil=%v", data.GetCompleted(), pws.mediaSession == nil)
 			if pws.mediaSession == nil {
 				return nil
 			}
@@ -499,15 +500,15 @@ func (pws *plivoWebsocketStreamer) Send(response internal_type.Stream) error {
 // channel/conversation identifier used for call control and correlation.
 func (pws *plivoWebsocketStreamer) handleStartEvent(mediaEvent internal_plivo.PlivoMediaEvent) {
 	pws.streamID = mediaEvent.StreamID
-	if mediaEvent.Start == nil {
-		return
+	if mediaEvent.Start != nil {
+		if mediaEvent.Start.StreamID != "" {
+			pws.streamID = mediaEvent.Start.StreamID
+		}
+		if mediaEvent.Start.CallID != "" {
+			pws.ChannelUUID = mediaEvent.Start.CallID
+		}
 	}
-	if mediaEvent.Start.StreamID != "" {
-		pws.streamID = mediaEvent.Start.StreamID
-	}
-	if mediaEvent.Start.CallID != "" {
-		pws.ChannelUUID = mediaEvent.Start.CallID
-	}
+	pws.telephony.logger.Infof("[plivo-debug] start event parsed: streamID=%q callID=%q", pws.streamID, pws.ChannelUUID)
 }
 
 // handleMediaEvent decodes an inbound base64 mu-law frame and forwards it to the
@@ -584,9 +585,10 @@ func (pws *plivoWebsocketStreamer) sendClearAudio() error {
 
 // writeMessage marshals and writes an outbound message under the write lock.
 func (pws *plivoWebsocketStreamer) writeMessage(message internal_plivo.PlivoOutboundMessage) error {
-	// No outbound frame is meaningful before the stream is established; mirror
-	// the Twilio streamer and drop it rather than emit an unaddressed message.
-	if pws.streamID == "" {
+	pws.telephony.logger.Infof("[plivo-debug] writeMessage event=%s streamID=%q connNil=%v", message.Event, pws.streamID, pws.connection == nil)
+	// clearAudio must target an established stream; drop it if streamID isn't set
+	// yet. playAudio carries no streamId, so it is always safe to send.
+	if message.Event == internal_plivo.EventTypeClearAudio && pws.streamID == "" {
 		return nil
 	}
 	messageJSON, err := json.Marshal(message)

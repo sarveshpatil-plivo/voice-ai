@@ -1929,10 +1929,6 @@ func (h requestorDispatchHandler) HandleSessionAuthenticationSucceeded(ctx conte
 
 	case protos.StreamMode_STREAM_MODE_AUDIO:
 		h.r.OnPacket(ctx,
-			internal_type.InitializeSpeechToTextPacket{
-				ContextID: p.ContextID,
-				Config:    conversationConfigurationObj,
-			},
 			internal_type.InitializeTextToSpeechPacket{
 				ContextID: p.ContextID,
 				Config:    conversationConfigurationObj,
@@ -1954,6 +1950,10 @@ func (h requestorDispatchHandler) HandleSessionAuthenticationSucceeded(ctx conte
 				Config:    conversationConfigurationObj,
 			},
 			internal_type.InitializeBehaviorPacket{
+				ContextID: p.ContextID,
+				Config:    conversationConfigurationObj,
+			},
+			internal_type.InitializeSpeechToTextPacket{
 				ContextID: p.ContextID,
 				Config:    conversationConfigurationObj,
 			},
@@ -2030,15 +2030,19 @@ func (h requestorDispatchHandler) HandleInitializeSpeechToText(ctx context.Conte
 		})
 		return
 	}
-	if err := atransformer.Initialize(); err != nil {
-		h.r.OnPacket(ctx, internal_type.InitializationFailedPacket{
-			ContextID: p.ContextID,
-			Stage:     internal_type.InitializationStageSpeechToText,
-			Error:     err,
-		})
-		return
-	}
 	h.r.speechToTextTransformer = atransformer
+	// STT connect can take several seconds; do it off the init path so it does
+	// not block the greeting or the rest of session setup. Early audio before the
+	// socket is ready is handled gracefully by the transformer (guarded client).
+	utils.Go(ctx, func() {
+		if err := atransformer.Initialize(); err != nil {
+			h.r.OnPacket(ctx, internal_type.InitializationFailedPacket{
+				ContextID: p.ContextID,
+				Stage:     internal_type.InitializationStageSpeechToText,
+				Error:     err,
+			})
+		}
+	})
 
 }
 

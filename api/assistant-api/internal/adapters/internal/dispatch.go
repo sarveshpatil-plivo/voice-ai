@@ -86,6 +86,7 @@ func (r *genericRequestor) runLowDispatcher(ctx context.Context) {
 // =============================================================================
 
 func (r *genericRequestor) dispatch(ctx context.Context, p internal_type.Packet) {
+	r.logger.Warnf("[init-timing] %T", p)
 	r.dispatchRoute.Route(ctx, p, func(ctx context.Context, p internal_type.Packet) {
 		switch p.(type) {
 		case internal_type.AsyncPacket:

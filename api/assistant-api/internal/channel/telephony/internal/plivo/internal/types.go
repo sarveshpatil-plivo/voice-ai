@@ -70,7 +70,7 @@ type PlivoOutboundMessage struct {
 // PlivoOutboundMedia is the audio body of a playAudio message.
 type PlivoOutboundMedia struct {
 	ContentType string `json:"contentType"`
-	SampleRate  int    `json:"sampleRate"`
+	SampleRate  int    `json:"sampleRate,string"`
 	Payload     string `json:"payload"`
 }
 
@@ -86,7 +86,8 @@ const (
 	InputBufferThreshold  = Linear16BytesPerMs * 40
 	MulawSilence          = 0xFF
 
-	// Outbound playAudio media settings.
+	// Outbound playAudio media settings. (DIAGNOSTIC: number sampleRate per
+	// Plivo's official example; clean-echo isolation run.)
 	OutboundContentType = "audio/x-mulaw"
 	OutboundSampleRate  = 8000
 )
