@@ -38,7 +38,18 @@ type cartesiaSpeechToText struct {
 	onPacket       func(pkt ...internal_type.Packet) error
 
 	startedAt time.Time
+
+	// finalizeTimer fires after a short silence (no VAD speech-activity
+	// heartbeats) to send Cartesia the "finalize" command; ink-whisper only
+	// flushes a transcript on finalize. utteranceOpen guards one finalize per
+	// utterance.
+	finalizeTimer *time.Timer
+	utteranceOpen bool
 }
+
+// cartesiaFinalizeSilence is how long to wait after the last VAD speech
+// heartbeat before finalizing the current utterance.
+const cartesiaFinalizeSilence = 600 * time.Millisecond
 
 func (*cartesiaSpeechToText) Name() string {
 	return "cartesia-stt"
@@ -294,14 +305,56 @@ func (cst *cartesiaSpeechToText) Transform(ctx context.Context, in internal_type
 			return nil
 		}
 		return nil
+	case internal_type.VadSpeechActivityPacket:
+		// VAD emits this heartbeat every frame while the user is speaking.
+		// Re-arm a short silence timer on each; when the heartbeats stop the
+		// timer fires and finalizes the utterance so ink-whisper returns its
+		// transcript.
+		cst.mu.Lock()
+		cst.utteranceOpen = true
+		if cst.finalizeTimer == nil {
+			cst.finalizeTimer = time.AfterFunc(cartesiaFinalizeSilence, cst.onSilence)
+		} else {
+			cst.finalizeTimer.Reset(cartesiaFinalizeSilence)
+		}
+		cst.mu.Unlock()
+		return nil
 	default:
 		return nil
 	}
 }
 
+// onSilence sends Cartesia the "finalize" text command once the user has gone
+// quiet, flushing ink-whisper's buffered audio into a transcript. Guarded so it
+// fires once per utterance.
+func (cst *cartesiaSpeechToText) onSilence() {
+	cst.mu.Lock()
+	if !cst.utteranceOpen {
+		cst.mu.Unlock()
+		return
+	}
+	cst.utteranceOpen = false
+	conn := cst.connection
+	cst.mu.Unlock()
+	if conn == nil {
+		return
+	}
+	cst.writeMu.Lock()
+	err := conn.WriteMessage(websocket.TextMessage, []byte("finalize"))
+	cst.writeMu.Unlock()
+	if err != nil {
+		cst.logger.Errorf("cartesia-stt: finalize send failed: %v", err)
+		return
+	}
+	cst.logger.Debugf("cartesia-stt: sent finalize after silence")
+}
+
 func (cst *cartesiaSpeechToText) Close(ctx context.Context) error {
 	cst.ctxCancel()
 	cst.mu.Lock()
+	if cst.finalizeTimer != nil {
+		cst.finalizeTimer.Stop()
+	}
 	ctxID := cst.contextId
 	connectedAt := cst.sttConnectedAt
 	cst.sttConnectedAt = time.Time{}

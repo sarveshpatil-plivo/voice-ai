@@ -120,6 +120,13 @@ func (h requestorDispatchHandler) HandleVadSpeechActivity(ctx context.Context, v
 	if h.r.endOfSpeechExecutor != nil {
 		_ = h.r.endOfSpeechExecutor.Execute(ctx, vl)
 	}
+	// Forward the speech-activity heartbeat to the STT transformer too: an STT
+	// that only flushes on demand (e.g. Cartesia ink-whisper) uses the gap
+	// between heartbeats to detect end-of-speech and finalize. Streaming STTs
+	// ignore it.
+	if h.r.speechToTextTransformer != nil {
+		_ = h.r.speechToTextTransformer.Transform(ctx, vl)
+	}
 }
 func (h requestorDispatchHandler) HandleSpeechToText(ctx context.Context, p internal_type.SpeechToTextPacket) {
 	p.ContextID = h.r.GetID()
