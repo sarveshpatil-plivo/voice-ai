@@ -335,10 +335,13 @@ func (pws *plivoWebsocketStreamer) Send(response internal_type.Stream) error {
 			return nil
 		}
 	case *protos.ConversationInterruption:
-		if data.Type == protos.ConversationInterruption_INTERRUPTION_TYPE_WORD {
-			if pws.mediaSession != nil {
-				pws.mediaSession.HandleInterrupt()
-			}
+		// Barge-in: flush the queued assistant audio on ANY interruption. The
+		// original code only handled WORD interruptions, so VAD-based barge-in
+		// (the caller starts talking over the agent) was silently dropped and
+		// the agent kept speaking. HandleInterrupt clears the local output
+		// buffer and sends Plivo a clearAudio, so it is safe for both types.
+		if pws.mediaSession != nil {
+			pws.mediaSession.HandleInterrupt()
 		}
 	case *protos.ConversationDisconnection:
 		_ = pws.Disconnect(data.GetType())
