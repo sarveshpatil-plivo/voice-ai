@@ -48,8 +48,10 @@ type cartesiaSpeechToText struct {
 }
 
 // cartesiaFinalizeSilence is how long to wait after the last VAD speech
-// heartbeat before finalizing the current utterance.
-const cartesiaFinalizeSilence = 600 * time.Millisecond
+// heartbeat before finalizing the current utterance. Kept above typical
+// mid-sentence pauses so a brief pause does not finalize early and clip the
+// rest of the sentence into a separate fragment.
+const cartesiaFinalizeSilence = 900 * time.Millisecond
 
 func (*cartesiaSpeechToText) Name() string {
 	return "cartesia-stt"
